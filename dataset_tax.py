@@ -21,6 +21,7 @@ taxonomy.csv
 
 """
 
+
 from __future__ import absolute_import, division, print_function
 import argparse
 from collections import Counter
@@ -51,8 +52,12 @@ class iNaturalistDataset():
         """ Ensure that all identifications have corresponding taxons.
         """
         for iden in self.identifications:
-            assert int(iden['taxon_id']) in self.taxon_id_to_taxon
-            assert iden['observation_id'] in self.ob_id_to_ob
+            #assert iden['taxon_id'] in self.taxon_id_to_taxon
+            if iden['taxon_id'] not in self.taxon_id_to_taxon:
+                self.identifications.remove(iden)
+            #assert iden['observation_id'] in self.ob_id_to_ob
+            if iden['observation_id'] not in self.ob_id_to_ob:
+                self.identifications.remove(iden)
 
         # Lets make sure that identification ids are unique
         iden_ids = [iden['id'] for iden in self.identifications]
@@ -61,20 +66,6 @@ class iNaturalistDataset():
         # Lets make sure that the observation ids are unique
         obs_ids = [ob['id'] for ob in self.observations]
         assert len(obs_ids) == len(set(obs_ids))
-    
-    def remove_non_leaf_taxa(self):
-        """ Remove non leaf taxa and identifications.
-        """
-        
-        leaf_taxa_ids = set()  # Use a set to avoid duplicates
-        for item in self.taxa:
-            if item['leaf'] == 1:
-                leaf_taxa_ids.add(item['taxon_id'])
-        
-        # Filter the identifications
-        idens_to_keep = [iden for iden in self.identifications if int(iden['taxon_id']) in leaf_taxa_ids]
-        self.identifications = idens_to_keep
-        self.iden_id_to_iden = {iden['id'] : iden for iden in self.identifications}
     
     def keep_specific_observations(self, observation_ids_to_keep):
         """ Keep only the specified observations.
@@ -164,7 +155,7 @@ class iNaturalistDataset():
         idens_to_keep = [iden for iden in self.identifications if iden['observation_id'] in self.ob_id_to_ob]
         self.identifications = idens_to_keep
         self.iden_id_to_iden = {iden['id'] : iden for iden in self.identifications}
-        
+
     def enforce_max_observations(self, max_observations=None):
         if max_observations is None:
             return
@@ -185,33 +176,33 @@ class iNaturalistDataset():
     
     def create_dataset(self, leaf_taxa_priors):
 
-        leaf_taxa_priors = dict(sorted(leaf_taxa_priors.items()))
         taxon_id_to_class_label = {}
-        
-        sorted_taxa = sorted(self.taxa, key=lambda x: x['key'])
-        ii=0
-        for d in sorted_taxa:
-            if d['leaf']==1 and (int(d['key']) in list(leaf_taxa_priors.keys())):
-                taxon_id_to_class_label[int(d['taxon_id'])] = ii#d['key']
-                ii+=1
-        
+        for d in self.taxa:
+            taxon_id_to_class_label[int(d['taxon_id'])] = d['key']
+            
+        taxonomy = []
+        for item in self.taxa:
+            new_item = {'parent': item['parent'], 'key': item['key'], 'data': {'prob': item['prob']}}
+            taxonomy.append(new_item)
+
         dataset = {
             'num_classes' : len(leaf_taxa_priors),
             'inat_taxon_id_to_class_label' : taxon_id_to_class_label,
-            'global_class_priors' : list(leaf_taxa_priors.values())
+            'global_class_priors' : leaf_taxa_priors,
+            'taxonomy_data' : taxonomy
         }
 
         workers = {}
         for iden in self.identifications:
             if iden['user_id'] not in workers:
                 workers[iden['user_id']] = {
-                    'id' : int(iden['user_id'])
+                    'id' : iden['user_id']
                 }
         
         images = {}
         for ob in self.observations:
             images[ob['id']] = {
-                'id' : int(ob['id']),
+                'id' : ob['id'],
                 'created_at' : None,
                 'url' : None,
                 'urls' : None
@@ -229,12 +220,12 @@ class iNaturalistDataset():
             annos.append({
                 'anno' : {
                     'gtype' : 'multiclass',
-                    'label' : worker_label, #iden['label']
+                    'label' : str(worker_label), #iden['label']
                 },
-                'image_id' : int(iden['observation_id']),
-                'worker_id' : int(iden['user_id']),
+                'image_id' : iden['observation_id'],
+                'worker_id' : iden['user_id'],
                 'created_at' : iden['created_at'],
-                'id' : int(iden['id'])
+                'id' : iden['id']
             })
 
         dataset = {
@@ -321,28 +312,21 @@ def main():
     # Build the observation label prediction dataset
     ob_inat = iNaturalistDataset(observations, observation_photos, identifications, taxonomy, users)
     ob_inat.keep_current_identifications()
-    ob_inat.remove_non_leaf_taxa() ####
     ob_inat.enforce_min_identifications(min_identifications=2)
     ob_inat.enforce_max_observations(args.max_observations)
     ob_ids = [ob['id'] for ob in ob_inat.observations] # Make sure the worker dataset has the same obs
     
     # Build the worker skill prediction dataset
     worker_inat = iNaturalistDataset(observations, observation_photos, identifications, taxonomy, users)
-    worker_inat.remove_non_leaf_taxa() ####
     worker_inat.keep_specific_observations(ob_ids)
     worker_inat.keep_one_identification_per_user_per_observation(keep_index=0)
     worker_inat.enforce_min_identifications(min_identifications=2)
     worker_inat.enforce_max_observations(args.max_observations)
     
-    # We want to reconcile the taxa priors between the image label and worker skill dataset
-    # This way the labels will match up
-    taxon_id_working_set = set([iden['taxon_id'] for iden in ob_inat.identifications + worker_inat.identifications])
-    
     taxa_priors = {}
     for d in ob_inat.taxa:
-        if d['leaf'] == 1 and (str(d['taxon_id']) in taxon_id_working_set):
+        if d['leaf'] == 1:
             taxa_priors[int(d['key'])] = float(d['prob'])
-    
     ob_label_pred_dataset = ob_inat.create_dataset(taxa_priors)
     
     label_pred_output_path = os.path.join(output_dir, 'observation_label_pred_dataset.json')
@@ -350,19 +334,16 @@ def main():
         json.dump(ob_label_pred_dataset, f)
 
     worker_skill_pred_dataset = worker_inat.create_dataset(taxa_priors)
-    
+
     worker_skill_pred_output_path = os.path.join(output_dir, 'worker_skill_pred_dataset.json')
     with open(worker_skill_pred_output_path, 'w') as f:
-        json.dump(worker_skill_pred_dataset, f)#, indent=4, ensure_ascii=False)
+        json.dump(worker_skill_pred_dataset, f, indent=4, ensure_ascii=False)
         
     # Build a "testing" dataset.
     inat = iNaturalistDataset(observations, observation_photos, identifications, taxonomy, users)
-    inat.remove_non_leaf_taxa() ####
-    inat.keep_specific_observations(ob_ids)
     inat.keep_current_identifications()
     inat.enforce_min_identifications(min_identifications=1)
     inat.enforce_max_observations(args.max_observations)
-    
     test_dataset = inat.create_dataset(taxa_priors)
 
     test_output_path = os.path.join(output_dir, 'test_dataset.json')

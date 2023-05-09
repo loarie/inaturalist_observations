@@ -8,6 +8,9 @@ import time
 
 import numpy as np
 
+import sys
+sys.path.append('..')  # Add the sibling directory to the module search path
+
 from crowdsourcing.annotations.classification import multiclass_single_binomial as MSB
 
 
@@ -74,7 +77,7 @@ def train(dataset_path, output_dir, estimate_priors_automatically=False, verific
 
         # Mark the images as finished.
         nf = 0
-        for image in dataset.images.itervalues():
+        for image in dataset.images.values():
             if image.y is not None:
                 image.finished = True
                 nf += 1
@@ -138,10 +141,10 @@ def train(dataset_path, output_dir, estimate_priors_automatically=False, verific
     # Make a csv file with the user parameter estimates
     # if verification_task:
     #     header = ['User ID', 'Prob Correct', 'Prob Trust Others']
-    #     user_skills = [(worker_id, worker.prob_correct, worker.prob_trust) for worker_id, worker in dataset.workers.iteritems()]
+    #     user_skills = [(worker_id, worker.prob_correct, worker.prob_trust) for worker_id, worker in dataset.workers.items()]
     # else:
     #     header = ['User ID', 'Prob Correct']
-    #     user_skills = [(worker_id, worker.prob_correct) for worker_id, worker in dataset.workers.iteritems()]
+    #     user_skills = [(worker_id, worker.prob_correct) for worker_id, worker in dataset.workers.items()]
     # user_skills.sort(key=lambda x: x[1])
     # user_skills.reverse()
     # with open(os.path.join(output_dir, 'user_skills.csv'), 'w') as f:

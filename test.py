@@ -9,6 +9,9 @@ import time
 
 import numpy as np
 
+import sys
+sys.path.append('..')  # Add the sibling directory to the module search path
+
 from crowdsourcing.annotations.classification import multiclass_single_binomial_nt as MSB
 
 # https://gist.github.com/vladignatyev/06860ec2040cb497f0f3
@@ -45,7 +48,7 @@ def test(model_path, dataset_path, output_dir, verification_task=False):
     del trained_model
 
     # Mark the workers' parameters as finished
-    for worker in test_dataset.workers.itervalues():
+    for worker in test_dataset.workers.values():
         worker.finished=True
 
     # Load in the test images and annotations and any new workers
@@ -88,7 +91,7 @@ def test(model_path, dataset_path, output_dir, verification_task=False):
     total_images = len(test_dataset.images)
     i = 0
     progress_bar(i, total_images)
-    for image in test_dataset.images.itervalues():
+    for image in test_dataset.images.values():
         image.predict_true_labels(avoid_if_finished=False)
         i += 1
         if i % 1000 == 0:
@@ -105,7 +108,7 @@ def test(model_path, dataset_path, output_dir, verification_task=False):
     s = time.time()
 
     # Save the risks
-    image_risks = [(image_id, image.risk) for image_id, image in test_dataset.images.iteritems()]
+    image_risks = [(image_id, image.risk) for image_id, image in test_dataset.images.items()]
     image_risks.sort(key=lambda x: x[1])
     image_risks.reverse()
     with open(os.path.join(output_dir, 'observation_risks.txt'), 'w') as f:
@@ -120,7 +123,7 @@ def test(model_path, dataset_path, output_dir, verification_task=False):
     risk_groups = [image_risks[i:i+group_size] for i in range(0,len(image_risks), group_size)]
     with open(os.path.join(output_dir, 'identify_urls.txt'), 'w') as f:
         for risk_group in risk_groups:
-            obs_ids = ','.join([x[0] for x in risk_group])
+            obs_ids = ','.join([str(x[0]) for x in risk_group])
             print("https://www.inaturalist.org/observations/identify?reviewed=any&quality_grade=needs_id,research&id=%s" % (obs_ids,), file=f)
 
 
@@ -128,15 +131,15 @@ def test(model_path, dataset_path, output_dir, verification_task=False):
     ob_url_str = 'https://www.inaturalist.org/observations/%s'
 
     if hasattr(test_dataset, 'inat_taxon_id_to_class_label'):
-        class_label_to_inat_taxon_id = {v : k for k, v in test_dataset.inat_taxon_id_to_class_label.iteritems()}
+        class_label_to_inat_taxon_id = {v : k for k, v in test_dataset.inat_taxon_id_to_class_label.items()}
         header = ["Observation ID", "Risk", "Pred Label", "Number of Identifications", "URL"]
         image_data = [(image_id, image.risk, class_label_to_inat_taxon_id[image.y.label], len(image.z), ob_url_str % (image_id,))
-                      for image_id, image in test_dataset.images.iteritems()]
+                      for image_id, image in test_dataset.images.items()]
 
     else:
         header = ["Observation ID", "Risk", "Number of Identifications", "URL"]
         image_data = [(image_id, image.risk, len(image.z), ob_url_str % (image_id,))
-                      for image_id, image in test_dataset.images.iteritems()]
+                      for image_id, image in test_dataset.images.items()]
 
     image_data.sort(key=lambda x: x[1])
     image_data.reverse()
@@ -148,7 +151,7 @@ def test(model_path, dataset_path, output_dir, verification_task=False):
 
     # Make a file that prints out the sequence of events for each observations.
     if hasattr(test_dataset, 'inat_taxon_id_to_class_label'):
-        class_label_to_inat_taxon_id = {v : k for k, v in test_dataset.inat_taxon_id_to_class_label.iteritems()}
+        class_label_to_inat_taxon_id = {v : k for k, v in test_dataset.inat_taxon_id_to_class_label.items()}
 
         with open(os.path.join(output_dir, 'observation_seq_events.txt'), 'w') as f:
             print("[Image ID] => (Worker ID, Prob Correct, <Prob Trust>, Taxon ID, Prior Taxon Prob) => ...  ==> [Predicted Taxon ID, Risk]", file=f)

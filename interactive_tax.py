@@ -9,6 +9,8 @@ import time
 
 import numpy as np
 
+import sys
+sys.path.append('..')
 from crowdsourcing.annotations.classification import multiclass_single_binomial as MSB
 
 def parse_args():
@@ -74,10 +76,10 @@ def main():
         while True:
             print("-----------------")
             print("Input worker id and then their identification (or the empty string to move to the next image)")
-            worker_id = str(raw_input("Worker id: "))
+            worker_id = str(input("Worker id: "))
             if worker_id == '':
                 break
-            taxon_id = str(raw_input("Taxon id: "))
+            taxon_id = str(input("Taxon id: "))
             if taxon_id == '':
                 break
             if taxon_id not in inat_taxon_id_to_class_label:
