@@ -52,13 +52,9 @@ class iNaturalistDataset():
         """ Ensure that all identifications have corresponding taxons.
         """
         for iden in self.identifications:
-            #assert iden['taxon_id'] in self.taxon_id_to_taxon
-            if iden['taxon_id'] not in self.taxon_id_to_taxon:
-                self.identifications.remove(iden)
-            #assert iden['observation_id'] in self.ob_id_to_ob
-            if iden['observation_id'] not in self.ob_id_to_ob:
-                self.identifications.remove(iden)
-
+            assert int(iden['taxon_id']) in self.taxon_id_to_taxon
+            assert iden['observation_id'] in self.ob_id_to_ob
+        
         # Lets make sure that identification ids are unique
         iden_ids = [iden['id'] for iden in self.identifications]
         assert len(iden_ids) == len(set(iden_ids))
@@ -107,7 +103,10 @@ class iNaturalistDataset():
                     try:
                         cat = datetime.datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S %Z')
                     except:
-                        cat = datetime.datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S')
+                        try:
+                            cat = datetime.datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S.%f')
+                        except:
+                            cat = datetime.datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S')
                     identification['time'] = cat
                 user_idens.sort(key=lambda x: x['time'])
 
@@ -135,6 +134,25 @@ class iNaturalistDataset():
                 print("ERROR: observation %s has multiple identifications from the same user" % (ob_id,))
                 assert False
 
+    def remove_ids_on_root(self):
+        """ Keep only the identifications not on the root.
+        """
+        
+        root = [d for d in self.taxa if d.get('key') == '0'][0]['taxon_id']
+        idens_to_keep = [iden for iden in self.identifications if iden['taxon_id'] != root]
+        self.identifications = idens_to_keep
+        self.iden_id_to_iden = {iden['id'] : iden for iden in self.identifications}
+
+        # Lets make sure that each identification for each observation is
+        # coming from a unique worker.
+        ob_id_to_idens = {ob['id'] : [] for ob in self.observations}
+        for iden in self.identifications:
+            ob_id_to_idens[iden['observation_id']].append(iden)
+        for ob_id, idens in ob_id_to_idens.items():
+            if len(set([iden['user_id'] for iden in idens])) != len(idens):
+                print("ERROR: observation %s has multiple identifications from the same user" % (ob_id,))
+                assert False
+    
     def enforce_min_identifications(self, min_identifications=1):
         """ Remove observations that have less than `min_identifications`.
         """
@@ -203,9 +221,9 @@ class iNaturalistDataset():
         for ob in self.observations:
             images[ob['id']] = {
                 'id' : ob['id'],
-                'created_at' : None,
-                'url' : None,
-                'urls' : None
+                'created_at' : "",
+                'url' : "",
+                'urls' : [""]
             }
 
         annos = []
@@ -220,7 +238,8 @@ class iNaturalistDataset():
             annos.append({
                 'anno' : {
                     'gtype' : 'multiclass',
-                    'label' : str(worker_label), #iden['label']
+                    'label' : str(iden['label']), #str(worker_label), #iden['label']
+                    'taxon_id' : int(iden['taxon_id'])
                 },
                 'image_id' : iden['observation_id'],
                 'worker_id' : iden['user_id'],
@@ -286,7 +305,8 @@ def main():
         reader = csv.DictReader(f)
         identifications = []
         for row in reader:
-            identifications.append(row)
+            if row['label'] != '0':
+                identifications.append(row)
 
     for d in identifications:
         for k, v in d.items():
