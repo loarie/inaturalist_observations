@@ -53,7 +53,7 @@ def main():
 
     model.initialize_default_priors()
     model.initialize_data_structures()
-
+    
     if hasattr(model, 'inat_taxon_id_to_class_label'):
         inat_taxon_id_to_class_label = model.inat_taxon_id_to_class_label
     else:
@@ -96,6 +96,13 @@ def main():
                 worker = model._CrowdWorkerClass_(worker_id, model)
                 worker.skill_vector = np.copy(model.default_skill_vector)
                 worker.prob_trust = model.prob_trust
+                # Also adding these trust vectors from defaults
+                worker.skill_perception_vector = np.copy(model.default_skill_vector)
+                worker.node_prior_perception_vector = np.copy(worker.params.node_priors_conditioned_on_parent)
+                worker.node_prior_vector = np.copy(worker.params.node_priors_conditioned_on_parent)
+                worker.skill_perception_vector = worker.skill_perception_vector * 0 + worker.prob_trust
+                worker.node_prior_perception_vector * 0 + worker.prob_trust
+                worker.node_prior_vector * 0 + worker.prob_trust
                 model.workers[worker_id] = worker
             else:
                 print("Found existing worker")
