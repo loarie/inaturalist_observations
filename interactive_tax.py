@@ -99,10 +99,29 @@ def main():
                 # Also adding these trust vectors from defaults
                 worker.skill_perception_vector = np.copy(model.default_skill_vector)
                 worker.node_prior_perception_vector = np.copy(worker.params.node_priors_conditioned_on_parent)
-                worker.node_prior_vector = np.copy(worker.params.node_priors_conditioned_on_parent)
+                node_counts = np.zeros_like(worker.params.node_priors)
+                node_probs_conditioned_on_parent = np.zeros_like(node_counts)
+                for node in worker.params.taxonomy.inner_nodes():
+                    parent_int_id = worker.params.orig_node_key_to_integer_id[node.key]
+                    parent_count = node_counts[parent_int_id]
+                    num_children = len(node.children)
+
+                    # A prior of seeing 10 instances of each child
+                    denom = (10 * num_children) + parent_count
+
+                    for child in node.children.values():
+                        child_int_id = worker.params.orig_node_key_to_integer_id[child.key]
+                        child_count = node_counts[child_int_id]
+
+                        # A prior of seeing 10 instances of each child
+                        num = 10. + child_count
+
+                        node_probs_conditioned_on_parent[child_int_id] = num / denom
+                node_probs_conditioned_on_parent[0] = 1
+                node_probs_conditioned_on_parent
+                worker.node_prior_vector = node_probs_conditioned_on_parent
                 worker.skill_perception_vector = worker.skill_perception_vector * 0 + worker.prob_trust
-                worker.node_prior_perception_vector * 0 + worker.prob_trust
-                worker.node_prior_vector * 0 + worker.prob_trust
+                worker.node_prior_perception_vector = worker.node_prior_perception_vector * 0 + worker.prob_trust
                 model.workers[worker_id] = worker
             else:
                 print("Found existing worker")
